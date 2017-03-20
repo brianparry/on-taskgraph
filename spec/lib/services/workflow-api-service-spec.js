@@ -20,6 +20,7 @@ describe('Taskgraph.Services.Api.Workflows', function () {
     var TaskGraph;
     var TaskGraphRunner;
     var eventsProtocol;
+    var taskGraphProtocol;
 
     function mockConsul() {
         return {
@@ -51,6 +52,7 @@ describe('Taskgraph.Services.Api.Workflows', function () {
         TaskGraph = helper.injector.get('TaskGraph.TaskGraph');
         TaskGraphRunner = helper.injector.get('TaskGraph.Runner');
         eventsProtocol = helper.injector.get('Protocol.Events');
+        taskGraphProtocol = helper.injector.get('Protocol.TaskGraphRunner');
     });
 
     beforeEach(function() {
@@ -102,6 +104,7 @@ describe('Taskgraph.Services.Api.Workflows', function () {
         this.sandbox.stub(workflowApiService, 'runTaskGraph');
         this.sandbox.stub(env, 'get');
         this.sandbox.stub(eventsProtocol, 'publishProgressEvent').resolves();
+        this.sandbox.stub(taskGraphProtocol, 'runTaskGraph');
     });
 
     afterEach('Http.Services.Api.Profiles afterEach', function() {
@@ -396,6 +399,13 @@ describe('Taskgraph.Services.Api.Workflows', function () {
             .to.be.rejectedWith(Errors.BadRequestError, /duplicate/);
     });
 
+    it('should find a graph definition if it exists', function() {
+        workflowApiService.findGraphDefinitionByName.restore();
+        store.getGraphDefinitions.resolves([{ graph: 'foo' }]);
+        return workflowApiService.findGraphDefinitionByName('test')
+            .should.eventually.deep.equal({ graph: 'foo' });
+    });
+
     it('should throw a NotFoundError if a graph definition does not exist', function() {
         workflowApiService.findGraphDefinitionByName.restore();
         store.getGraphDefinitions.resolves(null);
@@ -491,4 +501,24 @@ describe('Taskgraph.Services.Api.Workflows', function () {
         waterline.graphobjects.find.resolves(activeWorkflow);
         return expect(workflowApiService.getWorkflowByInstanceId()).to.become(activeWorkflow);
     });
+
+    it('should run task graph', function() {
+        taskGraphProtocol.runTaskGraph.resolves({ foo: 'bar' });
+        workflowApiService.runTaskGraph.restore();
+        return workflowApiService.runTaskGraph('foo', 'default')
+        .then(function(result) {
+            expect(result).to.deep.equal({foo: 'bar'});
+        });
+    });
+    
+    it('should detect graph run failure', function() {
+        taskGraphProtocol.runTaskGraph.rejects('run error');
+        workflowApiService.runTaskGraph.restore();
+        return workflowApiService.runTaskGraph('foo', 'default')
+        .then(function(result) {
+            expect(result).to.be.undefined;
+        });
+    });
+
+    // cancel a running graph
 });
